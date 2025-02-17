@@ -9,10 +9,10 @@ import android.content.IntentFilter
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.widget.Button
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import android.util.Log
 import kotlin.math.pow
 
 class MainActivity : AppCompatActivity() {
@@ -23,15 +23,38 @@ class MainActivity : AppCompatActivity() {
     private lateinit var scanButton: Button
 
     private val bluetoothAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
-    private val scanResults = mutableMapOf<String, Int>() // Store RSSI values of verified beacons
     private val scanHandler = Handler(Looper.getMainLooper())
+    private val scanResults = mutableMapOf<String, Int>() // Stores RSSI values of verified beacons
 
-    // **List of Verified Beacons (Classic Bluetooth MAC Addresses & Positions)**
+    // **List of Verified Beacons (MAC Address & Position)**
     private val verifiedBeacons = listOf(
-        Triple("F0:77:C3:F1:3B:A9", 450.0, 100.0), // Beacon 1 (Top)
-        Triple("13:30:4C:CB:95:E6", 500.0, 500.0), // Beacon 2 (Middle)
-        Triple("00:45:E2:A6:5F:9E", 450.0, 900.0)  // Beacon 3 (Bottom)
+        Triple("F0:77:C3:F1:3B:A9", 0, 2), // Beacon A
+        Triple("74:4C:A1:7A:D1:36", 0, 5), // Beacon B
+        Triple("00:45:E2:A6:5F:9E", 0, 8)  // Beacon C
     )
+
+    // **Valid Path Points** (Straight passage from (0,0) to (0,10))
+    private val validPath = (0..10).map { Pair(0, it) }
+
+    private val bluetoothReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val action: String? = intent?.action
+            if (BluetoothDevice.ACTION_FOUND == action) {
+                val device: BluetoothDevice? = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                val rssi: Short = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, Short.MIN_VALUE)
+                val macAddress = device?.address ?: return
+                val deviceName = device?.name ?: "Unknown Device"
+
+                // **Log Device Name and RSSI Value**
+                Log.e("BluetoothScan", "Device Found: Name: $deviceName | MAC: $macAddress | RSSI: $rssi")
+
+                if (verifiedBeacons.any { it.first == macAddress }) {
+                    scanResults[macAddress] = rssi.toInt()
+                    Log.e("BluetoothScan", "✅ Verified Beacon: $macAddress (RSSI: $rssi)")
+                }
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,7 +69,7 @@ class MainActivity : AppCompatActivity() {
             startBluetoothScan()
         }
 
-        // **Register Receiver for Classic Bluetooth Discovery**
+        // **Register Bluetooth Receiver**
         val filter = IntentFilter(BluetoothDevice.ACTION_FOUND)
         registerReceiver(bluetoothReceiver, filter)
     }
@@ -60,122 +83,49 @@ class MainActivity : AppCompatActivity() {
             bluetoothAdapter.cancelDiscovery()
         }
 
-        Log.d("BluetoothScan", "Starting Classic Bluetooth Discovery...")
         bluetoothAdapter?.startDiscovery()
 
-        // **Stop Discovery After 10 Seconds**
         scanHandler.postDelayed({
             bluetoothAdapter?.cancelDiscovery()
-            processScanResults()
-        }, 10000)
-    }
 
-    private val bluetoothReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            val action: String? = intent?.action
-            if (BluetoothDevice.ACTION_FOUND == action) {
-                val device: BluetoothDevice? = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
-                val rssi: Int = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, Short.MIN_VALUE).toInt()
-
-                device?.address?.let { macAddress ->
-                    if (verifiedBeacons.any { it.first == macAddress }) {
-                        scanResults[macAddress] = rssi
-                        Log.d("BluetoothScan", "Verified Device Found: $macAddress (RSSI: $rssi)")
-                    }
-                }
+            if (scanResults.size < 3) {
+                errorMessage.text = "Not enough verified beacons detected. Move closer."
+                errorMessage.visibility = TextView.VISIBLE
+                return@postDelayed
             }
-        }
+
+            // **Calculate User Position using Grid-based Mapping**
+            val estimatedY = estimateUserPosition()
+            val userPosition = Pair(0, estimatedY)
+            customMapView.updateUserPosition(userPosition.first.toDouble(), userPosition.second.toDouble()) // Update map
+            userLocationText.text = "User Location: (0, $estimatedY)"
+        }, 10000) // Scan for 10 seconds
     }
 
-    private fun processScanResults() {
-        if (scanResults.size < 3) {
-            errorMessage.text = "Not enough verified beacons detected. Move closer."
-            errorMessage.visibility = TextView.VISIBLE
-            return
-        }
-
-        // **Map Beacons to Their Positions & RSSI Values**
+    // **Estimate User Position on a Fixed Grid**
+    private fun estimateUserPosition(): Int {
         val distances = verifiedBeacons.mapNotNull { (mac, x, y) ->
             scanResults[mac]?.let { rssi ->
                 val distance = calculateDistance(rssi)
-                if (distance.isNaN() || distance.isInfinite() || distance > 100) {  // Ignore invalid distances
-                    Log.e("ProcessScan", "Ignoring invalid distance for $mac: $distance")
-                    null
-                } else {
-                    Triple(x, y, distance)
-                }
+                Triple(x, y, distance)
             }
         }
 
-        // **Calculate User Position**
-        if (distances.size == 3) {
-            val userPosition = trilaterate(distances)
-            if (!userPosition.first.isNaN() && !userPosition.second.isNaN()) {
-                customMapView.updateUserPosition(userPosition.first, userPosition.second)
-                userLocationText.text = "User Location: (${userPosition.first}, ${userPosition.second})"
-            } else {
-                errorMessage.text = "Beacon signals too weak for accurate positioning."
-                errorMessage.visibility = TextView.VISIBLE
-            }
-        } else {
-            errorMessage.text = "Beacon signals too weak for positioning."
-            errorMessage.visibility = TextView.VISIBLE
-        }
+        if (distances.isEmpty()) return 0 // Default to start of passage
+
+        // **Weighted Positioning on the Grid**
+        val weightedY = distances.sumOf { it.second * (1 / it.third) } / distances.sumOf { 1 / it.third }
+        return validPath.minByOrNull { (_, y) -> kotlin.math.abs(y - weightedY) }?.second ?: 0
     }
 
-
-    // **Convert RSSI to Distance**
+    // **Convert RSSI to Approximate Distance**
     private fun calculateDistance(rssi: Int): Double {
         val txPower = -59 // Reference RSSI at 1m
         return 10.0.pow((txPower - rssi) / (10 * 2.0))
     }
 
-    // **Trilateration to Find User Position**
-    // **Trilateration with Validity Checks**
-    private fun trilaterate(beacons: List<Triple<Double, Double, Double>>): Pair<Double, Double> {
-        if (beacons.size < 3) {
-            Log.e("Trilateration", "Not enough beacons for trilateration.")
-            return Pair(Double.NaN, Double.NaN)
-        }
-
-        val (x1, y1, d1) = beacons[0]
-        val (x2, y2, d2) = beacons[1]
-        val (x3, y3, d3) = beacons[2]
-
-        // **Avoid Invalid Distance Values**
-        if (d1.isNaN() || d2.isNaN() || d3.isNaN() || d1 <= 0 || d2 <= 0 || d3 <= 0) {
-            Log.e("Trilateration", "Invalid distances: ($d1, $d2, $d3)")
-            return Pair(Double.NaN, Double.NaN)
-        }
-
-        val A = 2 * (x2 - x1)
-        val B = 2 * (y2 - y1)
-        val C = d1.pow(2) - d2.pow(2) - x1.pow(2) + x2.pow(2) - y1.pow(2) + y2.pow(2)
-
-        val D = 2 * (x3 - x1)
-        val E = 2 * (y3 - y1)
-        val F = d1.pow(2) - d3.pow(2) - x1.pow(2) + x3.pow(2) - y1.pow(2) + y3.pow(2)
-
-        val denominator = (E * A - B * D)
-        if (denominator == 0.0) {
-            Log.e("Trilateration", "Denominator is zero, causing division error.")
-            return Pair(Double.NaN, Double.NaN)
-        }
-
-        val x = (C * E - F * B) / denominator
-        val y = (C * D - A * F) / (B * D - A * E)
-
-        if (x.isInfinite() || y.isInfinite() || x.isNaN() || y.isNaN()) {
-            Log.e("Trilateration", "Invalid result: ($x, $y)")
-            return Pair(Double.NaN, Double.NaN)
-        }
-
-        return Pair(x, y)
-    }
-
-
     override fun onDestroy() {
         super.onDestroy()
-        unregisterReceiver(bluetoothReceiver) // Unregister Receiver when App is Closed
+        unregisterReceiver(bluetoothReceiver)
     }
 }

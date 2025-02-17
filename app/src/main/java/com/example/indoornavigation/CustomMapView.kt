@@ -1,25 +1,38 @@
 package com.example.indoornavigation
 
 import android.content.Context
-import android.graphics.*
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
 import android.util.AttributeSet
 import android.view.View
 
 class CustomMapView(context: Context, attrs: AttributeSet?) : View(context, attrs) {
 
-    private val paint = Paint().apply {
-        isAntiAlias = true
+    private val paintBeacon = Paint().apply {
+        color = Color.RED
         style = Paint.Style.FILL
     }
 
-    private var userX: Float = -1f
-    private var userY: Float = -1f
-
-    fun updateUserPosition(newX: Double, newY: Double) {
-        userX = newX.toFloat()
-        userY = newY.toFloat()
-        invalidate() // Refresh view with new position
+    private val paintUser = Paint().apply {
+        color = Color.BLUE
+        style = Paint.Style.FILL
     }
+
+    private val paintGrid = Paint().apply {
+        color = Color.GRAY
+        strokeWidth = 4f
+    }
+
+    private var userX: Float = -1f // Default, means not set
+    private var userY: Float = -1f // Default, means not set
+
+    // **Define Beacon Positions in Map Coordinates**
+    private val beacons = listOf(
+        Pair(0f, 2f),
+        Pair(0f, 5f),
+        Pair(0f, 8f)
+    )
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
@@ -27,43 +40,28 @@ class CustomMapView(context: Context, attrs: AttributeSet?) : View(context, attr
         val width = width.toFloat()
         val height = height.toFloat()
 
-        // **Draw Vertical Passage (Hallway)**
-        paint.color = Color.LTGRAY
-        val passageLeft = width * 0.4f
-        val passageRight = width * 0.6f
-        canvas.drawRect(passageLeft, 0f, passageRight, height, paint)
+        // **Draw Grid Line for Passage**
+        canvas.drawLine(width / 2, 0f, width / 2, height, paintGrid)
 
-        // **Draw Beacons + Numbers**
-        paint.color = Color.RED
-        val beaconRadius = 20f
-        val textPaint = Paint().apply {
-            color = Color.BLACK
-            textSize = 40f
-            typeface = Typeface.DEFAULT_BOLD
+        // **Draw Beacons as Red Dots**
+        for ((x, y) in beacons) {
+            canvas.drawCircle(width / 2, height - (y / 10) * height, 20f, paintBeacon)
         }
 
-        val beaconPositions = listOf(
-            Pair(width / 2, height * 0.1f), // Beacon 1 (Top)
-            Pair(width / 2, height * 0.5f), // Beacon 2 (Middle)
-            Pair(width / 2, height * 0.9f)  // Beacon 3 (Bottom)
-        )
-
-        beaconPositions.forEachIndexed { index, (x, y) ->
-            canvas.drawCircle(x, y, beaconRadius, paint)
-            canvas.drawText("${index + 1}", x + 30f, y, textPaint) // Draw beacon number
-        }
-
-        // **Draw User (Blue Dot)**
+        // **Draw User as Blue Dot**
         if (userX != -1f && userY != -1f) {
-            paint.color = Color.BLUE
-            val userRadius = 25f
-
-            // Keep user within map bounds
-            val clampedX = userX.coerceIn(passageLeft - 20f, passageRight + 20f)
-            val clampedY = userY.coerceIn(0f, height)
-
-            canvas.drawCircle(clampedX, clampedY, userRadius, paint)
+            canvas.drawCircle(userX, userY, 25f, paintUser)
         }
     }
 
+    // **Update User Position and Refresh View**
+    fun updateUserPosition(x: Double, y: Double) {
+        val width = width.toFloat()
+        val height = height.toFloat()
+
+        userX = width / 2 // Always center X-axis
+        userY = height - (y.toFloat() / 10) * height // Scale Y-axis from (0,0) to (0,10)
+
+        invalidate() // Redraw view to show updates
+    }
 }
