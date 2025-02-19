@@ -28,13 +28,14 @@ class MainActivity : AppCompatActivity() {
 
     // **List of Verified Beacons (MAC Address & Position)**
     private val verifiedBeacons = listOf(
-        Triple("F0:77:C3:F1:3B:A9", 0, 2), // Beacon A
-        Triple("74:4C:A1:7A:D1:36", 0, 5), // Beacon B
-        Triple("00:45:E2:A6:5F:9E", 0, 8)  // Beacon C
+        Triple("F0:77:C3:F1:3B:A9", 0, 2), // Beacon Omkar
+        Triple("74:4C:A1:7A:D1:36", 3, 8), // Beacon B Chinmay
+        Triple("00:45:E2:A6:5F:9E", 0, 8), // Beacon Ganak
+        Triple("34:B9:8D:32:E7:0C", 0, 5)  // New Beacon D Chinmay Phone
     )
 
-    // **Valid Path Points** (Straight passage from (0,0) to (0,10))
-    private val validPath = (0..10).map { Pair(0, it) }
+    // **Valid Path Points for L-Shape**
+    private val validPath = (0..8).map { Pair(0, it) } + (1..5).map { Pair(it, 8) }
 
     private val bluetoothReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -95,15 +96,15 @@ class MainActivity : AppCompatActivity() {
             }
 
             // **Calculate User Position using Grid-based Mapping**
-            val estimatedY = estimateUserPosition()
-            val userPosition = Pair(0, estimatedY)
-            customMapView.updateUserPosition(userPosition.first.toDouble(), userPosition.second.toDouble()) // Update map
-            userLocationText.text = "User Location: (0, $estimatedY)"
+            val (estimatedX, estimatedY) = estimateUserPosition()
+            val userPosition = Pair(estimatedX, estimatedY)
+            customMapView.updateUserPosition(userPosition.first.toFloat(), userPosition.second.toFloat()) // Update map
+            userLocationText.text = "User Location: ($estimatedX, $estimatedY)"
         }, 10000) // Scan for 10 seconds
     }
 
-    // **Estimate User Position on a Fixed Grid**
-    private fun estimateUserPosition(): Int {
+    // **Estimate User Position on a Fixed Grid for L-path**
+    private fun estimateUserPosition(): Pair<Int, Int> {
         val distances = verifiedBeacons.mapNotNull { (mac, x, y) ->
             scanResults[mac]?.let { rssi ->
                 val distance = calculateDistance(rssi)
@@ -111,11 +112,15 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        if (distances.isEmpty()) return 0 // Default to start of passage
+        if (distances.isEmpty()) return Pair(0, 0) // Default to start of passage
 
         // **Weighted Positioning on the Grid**
+        val weightedX = distances.sumOf { it.first * (1 / it.third) } / distances.sumOf { 1 / it.third }
         val weightedY = distances.sumOf { it.second * (1 / it.third) } / distances.sumOf { 1 / it.third }
-        return validPath.minByOrNull { (_, y) -> kotlin.math.abs(y - weightedY) }?.second ?: 0
+
+        return validPath.minByOrNull { (x, y) ->
+            kotlin.math.abs(x - weightedX) + kotlin.math.abs(y - weightedY)
+        } ?: Pair(0, 0)
     }
 
     // **Convert RSSI to Approximate Distance**
