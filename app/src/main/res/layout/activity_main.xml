@@ -1,16 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- Custom Indoor Map View -->
-    <com.example.indoornavigation.CustomMapView
-        android:id="@+id/indoorMapView"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_above="@id/errorMessage" />
+    <!-- Spinner - Centered at Top -->
+    <Spinner
+        android:id="@+id/roomSelector"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="16dp" />
 
-    <!-- TextView for Displaying User's Location -->
+    <!-- User Location TextView -->
     <TextView
         android:id="@+id/userLocationText"
         android:layout_width="wrap_content"
@@ -18,30 +23,55 @@
         android:text="User Location: (0.0, 0.0)"
         android:textSize="18sp"
         android:textColor="@android:color/black"
-        android:layout_alignParentTop="true"
-        android:layout_centerHorizontal="true"
-        android:layout_marginTop="20dp"/>
+        android:elevation="8dp"
+        android:padding="10dp"
+        app:layout_constraintTop_toBottomOf="@id/roomSelector"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginTop="12dp" />
 
-    <!-- Button to Start Scan -->
+    <!-- Custom Indoor Map View -->
+    <com.example.indoornavigation.CustomCampusMapView
+        android:id="@+id/indoorMapView"
+        android:layout_width="0dp"
+        android:layout_height="600dp"
+        app:layout_constraintBottom_toTopOf="@id/errorMessage"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/userLocationText" />
+
+
+
+    <!-- Error Message TextView (optional below map) -->
+    <TextView
+        android:id="@+id/errorMessage"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textSize="16sp"
+        android:textColor="@android:color/holo_red_dark"
+        android:background="@android:color/white"
+        android:visibility="gone"
+        android:elevation="4dp"
+        android:padding="8dp"
+        app:layout_constraintTop_toBottomOf="@id/indoorMapView"
+        app:layout_constraintBottom_toTopOf="@id/scanButton"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:layout_marginStart="32dp"
+        android:layout_marginEnd="32dp"
+        android:layout_marginBottom="8dp" />
+
+    <!-- Scan Button at Bottom -->
     <Button
         android:id="@+id/scanButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Scan"
-        android:layout_alignParentBottom="true"
-        android:layout_centerHorizontal="true"
-        android:layout_marginBottom="50dp"/>
+        android:layout_marginBottom="24dp"
+        android:elevation="6dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- Error Message TextBox (Shows if User Location is Not Found) -->
-    <TextView
-        android:id="@+id/errorMessage"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text=""
-        android:textSize="16sp"
-        android:textColor="@android:color/holo_red_dark"
-        android:visibility="gone"
-        android:layout_above="@id/scanButton"
-        android:layout_centerHorizontal="true"
-        android:layout_marginBottom="20dp"/>
-</RelativeLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>
